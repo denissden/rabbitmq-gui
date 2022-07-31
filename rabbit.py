@@ -7,6 +7,10 @@ import pika.spec
 
 
 def get_headers(text: str):
+    """
+    Turns a string of multiple lines into dict. 
+    Key and value are reparated by first ':'.
+    """
     headers = {}
     for line in text.split('\n'):
         kv = line.split(':', maxsplit=1)
@@ -19,8 +23,10 @@ def get_headers(text: str):
 
 class Rabbit:
     def __init__(self, connection=None) -> None:
+        self.default_connection = False
         self.connection = connection
         if connection is None:
+            self.default_connection = True
             self.connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
         self._new_channel()
         
@@ -34,19 +40,32 @@ class Rabbit:
     def _new_channel(self):
         self.channel = self.connection.channel()
 
-    def publish(self, exchange, routing_key, headers_text, body):
+    def publish(self, exchange, routing_key, headers_text, body) -> Tuple[bool, str]:
+        """
+        Publish a message.
+        Consume error starts a new channel closing the previous one.
+        """
         headers = get_headers(headers_text)
         with self.lock:
-            self.channel.basic_publish(
-                exchange=exchange, 
-                routing_key=routing_key, 
-                body=body, 
-                properties=pika.BasicProperties(
-                    headers=headers
+            try:
+                self.channel.basic_publish(
+                    exchange=exchange, 
+                    routing_key=routing_key, 
+                    body=body, 
+                    properties=pika.BasicProperties(
+                        headers=headers
+                    )
                 )
-            )
+                return True, None
+            except pika.exceptions.ChannelClosedByBroker as e:
+                self._new_channel()
+                return False, str(e)
 
     def consume(self, q_name: str, retries=1) -> Tuple[bool, str]:
+        """
+        Consume on a queue.
+        Consume error starts a new channel closing the previous one.
+        """
         try:
             self.channel.basic_consume(
                 q_name, 
@@ -75,6 +94,9 @@ class Rabbit:
             i += 1
 
     def start_consuming(self):
+        """
+        Start consuming on another thread.
+        """
         t = threading.Thread(target=self._start_consuming)
         t.start()
         t.join(0)
@@ -85,12 +107,21 @@ class Rabbit:
         self.on_message(m)
 
     def terminate(self):
+        """
+        Stop consuming and close a channel.
+        Closes only default connections. Connection provided in __init__ can be used by multiple instances.
+        """
         self.channel.stop_consuming()
         self.channel.close()
-        # self.connection.close()
+
+        if self.default_connection:
+            self.connection.close()
 
 @dataclass()
 class Message:
+    """
+    Received message
+    """
     channel: pika.adapters.blocking_connection.BlockingChannel
     method: pika.spec.Basic.Deliver
     properties: pika.spec.BasicProperties

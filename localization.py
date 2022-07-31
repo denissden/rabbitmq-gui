@@ -13,6 +13,7 @@ class Locale(Enum):
     ROUTING_KEY = auto()
     HEADERS = auto()
     BODY = auto()
+    MESSAGE_SENT = auto()
     PUBLISH = auto()
     PUBLISH_ONE = auto()
     PUBLISH_MANY = auto()
@@ -45,6 +46,7 @@ class Locale(Enum):
         ROUTING_KEY: 'Routing key',
         HEADERS: 'Headers',
         BODY: 'Content',
+        MESSAGE_SENT: 'Message sent',
 
         PUBLISH: 'Publish',
         PUBLISH_ONE: 'Publish a message',
@@ -73,6 +75,7 @@ class Locale(Enum):
         ROUTING_KEY: 'Топик',
         HEADERS: 'Хедеры',
         BODY: 'Содержимое',
+        MESSAGE_SENT: 'Сообщение отправлено',
 
         PUBLISH: 'Отправить',
         PUBLISH_ONE: 'Отправить сообщение',

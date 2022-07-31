@@ -42,16 +42,30 @@ WINDOW_MAP: Dict[sg.Window, 'Window'] = {}
 RABBIT_CONNECTION = None
 
 class Window(ABC):
+    """
+    Window base class.
+    """
     @abstractmethod
     def show(self):
+        """
+        Create and show a window here.
+        Set (finalize=True) to show a window instantly.
+        """
         pass
 
     @abstractmethod
     def process_events(self, event, values):
+        """
+        PySimpleGUI event for this particular window.
+        """
         pass
 
     @abstractmethod
     def init_layout(self):
+        """
+        Set self.layout here.
+        Call in __init__.
+        """
         pass
 
     def _show(self):
@@ -62,6 +76,9 @@ class Window(ABC):
         self.window.close()
     
     def restart_ui(self):
+        """
+        Restarts the window and creates layout again.
+        """
         self.init_layout()
         self._close()
         self.show()
@@ -137,12 +154,16 @@ class SendWindow(Window):
     def process_events(self, event, values):
         print(event, values)
         if event == Keys.SEND_BUTTON:
-            self.rabbit.publish(
+            success, error = self.rabbit.publish(
                 values[Keys.SEND_EXCH],
                 values[Keys.SEND_ROUTING_KEY],
                 values[Keys.SEND_HEADERS],
                 values[Keys.SEND_CONTENT],
             )
+            if success:
+                self.window.set_title(Locale.MESSAGE_SENT)
+            else:
+                self.window.set_title(f'{Locale.ERROR} {error}')
         
         if event is None:
             self._close()
@@ -185,6 +206,9 @@ class ConsumeWindow(Window):
         print(event, values)
         if event == Keys.CON_CONSUME:
             q_name = values[Keys.CON_QUEUE]
+
+            # queues are added to a channel until there is an error
+            # after that Rabbit will create a new channel with no queues
             success, error = self.rabbit.consume(q_name)
             text = self.window[Keys.CON_TEXT_QUEUE]
             if success:
@@ -201,9 +225,12 @@ class ConsumeWindow(Window):
     def _on_message(self, m: Message):
         self.messages.append(m)
         self.messages_log.append(self._format_message(m))
-        self.update_ui()
+        self._update_ui()
        
-    def update_ui(self):
+    def _update_ui(self):
+        """
+        Update messages log text and listbox values.
+        """
         listbox = self.window[Keys.CON_LISTBOX_MESSAGES]
         listbox.update(datetime.now().strftime('%H:%M:%S') + ': ' + (msg.text() or '_no_content_') for msg in self.messages)
 
@@ -220,7 +247,7 @@ class ConsumeWindow(Window):
     
     def restart_ui(self):
         super().restart_ui()
-        self.update_ui()
+        self._update_ui()
 
 class ConnectWindow(Window):
     def __init__(self) -> None:
@@ -247,6 +274,7 @@ class ConnectWindow(Window):
     def process_events(self, event, values):
         print(event, values)
         if event == Keys.CONNECT_BUTTON:
+            # Minimal info needed to connect
             params = pika.ConnectionParameters(
                 host=values[Keys.CONNECT_HOST],
                 port=values[Keys.CONNECT_PORT],
@@ -255,6 +283,8 @@ class ConnectWindow(Window):
                     password=values[Keys.CONNECT_PASSWORD]
                 )
             )
+
+            # Create a global connection for Rabbit instances to use
             try:
                 connection = pika.BlockingConnection(params)
                 print(connection)
@@ -280,5 +310,5 @@ def main_loop():
     RABBIT_CONNECTION.close()
 
 if __name__ == '__main__':
-    Locale.set(Locale.ru)
+    Locale.set(Locale.en)
     main_loop()
