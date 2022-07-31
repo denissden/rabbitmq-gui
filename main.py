@@ -6,9 +6,12 @@ from typing import Dict
 import PySimpleGUI as sg
 from enum import Enum, auto
 from rabbit import Rabbit, Message
+from localization import Locale
 import pika
 
 class Keys(Enum):
+    LANG_EN = auto()
+    LANG_RU = auto()
     START_NEW_SEND = auto()
     START_NEW_CON = auto()
     START_CONNECT = auto()
@@ -47,25 +50,42 @@ class Window(ABC):
     def process_events(self, event, values):
         pass
 
+    @abstractmethod
+    def init_layout(self):
+        pass
+
     def _show(self):
         WINDOW_MAP[self.window] = self
     
     def _close(self):
         del WINDOW_MAP[self.window]
         self.window.close()
+    
+    def restart_ui(self):
+        self.init_layout()
+        self._close()
+        self.show()
 
 class StartWindow(Window):
     def __init__(self) -> None:
+        self.init_layout()
+
+    def init_layout(self):
         size = 20, 1
         self.layout = [
-            [sg.Text('RabbitMQ Graphical client')],
-            [sg.Button('Connect', size=size, key=Keys.START_CONNECT)],
-            [sg.Button('Send a message', size=size, key=Keys.START_NEW_SEND)],
-            [sg.Button('Consume a queue', size=size, key=Keys.START_NEW_CON)],
+            [sg.Text(Locale.TITLE_MAIN)],
+            [sg.Button(Locale.CONNECT, size=size, key=Keys.START_CONNECT)],
+            [sg.Button(Locale.PUBLISH_ONE, size=size, key=Keys.START_NEW_SEND)],
+            [sg.Button(Locale.CONSUME_FROM_QUEUE, size=size, key=Keys.START_NEW_CON)],
+            [sg.Text(Locale.LANGUAGE)],
+            [
+                sg.Button('en', key=Keys.LANG_EN), 
+                sg.Button('ru', key=Keys.LANG_RU),
+            ],
         ]
 
     def show(self):
-        self.window = sg.Window("RabbitMQ graphical client", self.layout, finalize=True)
+        self.window = sg.Window(Locale.TITLE_MAIN, self.layout, finalize=True)
         self._show()
     
     def process_events(self, event, values):
@@ -76,26 +96,42 @@ class StartWindow(Window):
         elif event == Keys.START_CONNECT:
             ConnectWindow().show()
         
+        elif event == Keys.LANG_EN:
+            Locale.set(Locale.en)
+            self._refresh_all_windows()
+        elif event == Keys.LANG_RU:
+            Locale.set(Locale.ru)
+            self._refresh_all_windows()
+        
         if event is None and len(WINDOW_MAP) == 1:
             self._close()
+        
+    def _refresh_all_windows(self):
+        windows_to_update = list(WINDOW_MAP.values())
+        for window in windows_to_update:
+            window.restart_ui()
 
 class SendWindow(Window):
     def __init__(self) -> None:
-        name_size = 10, 1
-        self.layout = [
-            [sg.Text('Send messages')],
-            [sg.Text('Exchange', size=name_size), sg.In(size=(25, 1), enable_events=True, key=Keys.SEND_EXCH)],
-            [sg.Text('Routing key', size=name_size), sg.In(size=(25, 1), enable_events=True, key=Keys.SEND_ROUTING_KEY)],
-            [sg.Text('Headers', size=name_size), sg.Multiline(size=(25, 4), enable_events=True, key=Keys.SEND_HEADERS)],
-            [sg.Text('Content', size=name_size), sg.Multiline(size=(25, 2), enable_events=True, key=Keys.SEND_CONTENT)],
-            [sg.Button('Send message', key=Keys.SEND_BUTTON)],
-        ]
+        self.init_layout()
 
         self.rabbit = Rabbit(RABBIT_CONNECTION)
         self.info = f'{self.rabbit.connection_params.host}:{self.rabbit.connection_params.port}'
 
+
+    def init_layout(self):
+        name_size = 10, 1
+        self.layout = [
+            [sg.Text(Locale.PUBLISH_MANY)],
+            [sg.Text(Locale.EXCHANGE, size=name_size), sg.In(size=(25, 1), enable_events=True, key=Keys.SEND_EXCH)],
+            [sg.Text(Locale.ROUTING_KEY, size=name_size), sg.In(size=(25, 1), enable_events=True, key=Keys.SEND_ROUTING_KEY)],
+            [sg.Text(Locale.HEADERS, size=name_size), sg.Multiline(size=(25, 4), enable_events=True, key=Keys.SEND_HEADERS)],
+            [sg.Text(Locale.BODY, size=name_size), sg.Multiline(size=(25, 2), enable_events=True, key=Keys.SEND_CONTENT)],
+            [sg.Button(Locale.PUBLISH_ONE, key=Keys.SEND_BUTTON)],
+        ]
+
     def show(self):
-        self.window = sg.Window(f'Publish a message ({self.info})', self.layout, finalize=True)
+        self.window = sg.Window(f'{Locale.PUBLISH_ONE} ({self.info})', self.layout, finalize=True)
         self._show()
     
     def process_events(self, event, values):
@@ -113,20 +149,7 @@ class SendWindow(Window):
 
 class ConsumeWindow(Window):
     def __init__(self) -> None:
-        self.main_layout = [
-            [sg.Text('Queue:', enable_events=True, key=Keys.CON_TEXT_QUEUE)],
-            [sg.In(size=(20, 1), enable_events=True, key=Keys.CON_QUEUE), sg.Button('Consume', key=Keys.CON_CONSUME)],
-            [sg.Listbox(size=(25, 10), values=[], enable_events=True, key=Keys.CON_LISTBOX_MESSAGES)],
-        ]
-
-        self.log_layout = [
-            [sg.Text('Recent messages:')],
-            [sg.Multiline(size=(25, 14), key=Keys.CON_TEXT_LOG)]
-        ]
-
-        self.layout = [
-            [sg.Col(self.main_layout), sg.VSep(), sg.Col(self.log_layout)]
-        ]
+        self.init_layout()
 
         self.rabbit = Rabbit(RABBIT_CONNECTION)
         self.messages: list[Message] = []
@@ -135,9 +158,27 @@ class ConsumeWindow(Window):
         self.rabbit.start_consuming()
         self.rabbit.on_message = self._on_message
         self.info = f'{self.rabbit.connection_params.host}:{self.rabbit.connection_params.port}'
+        self.title = f'{Locale.CONSUME_FROM_QUEUE} ({self.info})'
+
+
+    def init_layout(self):
+        self.main_layout = [
+            [sg.Text(f'{Locale.QUEUE}:', enable_events=True, key=Keys.CON_TEXT_QUEUE)],
+            [sg.In(size=(20, 1), enable_events=True, key=Keys.CON_QUEUE), sg.Button(Locale.CONSUME, key=Keys.CON_CONSUME)],
+            [sg.Listbox(size=(25, 10), values=[], enable_events=True, key=Keys.CON_LISTBOX_MESSAGES)],
+        ]
+
+        self.log_layout = [
+            [sg.Text(f'{Locale.RECENT_MESSAGES}:')],
+            [sg.Multiline(size=(25, 14), key=Keys.CON_TEXT_LOG)]
+        ]
+
+        self.layout = [
+            [sg.Col(self.main_layout), sg.VSep(), sg.Col(self.log_layout)]
+        ]
 
     def show(self):
-        self.window = sg.Window(f'Consume on queue ({self.info})', self.layout, finalize=True)
+        self.window = sg.Window(self.title, self.layout, finalize=True)
         self._show()
 
     def process_events(self, event, values):
@@ -148,9 +189,10 @@ class ConsumeWindow(Window):
             text = self.window[Keys.CON_TEXT_QUEUE]
             if success:
                 text.update(q_name)
-                self.window.set_title(f'{q_name} ({self.info})')
+                self.title = f'{q_name} ({self.info})'
+                self.window.set_title(self.title)
             else:
-                text.update('Error! ' + error)
+                text.update(f'{Locale.ERROR} {error}')
         # Close window event
         if event == None:
             self.rabbit.terminate()
@@ -158,12 +200,14 @@ class ConsumeWindow(Window):
     
     def _on_message(self, m: Message):
         self.messages.append(m)
-
+        self.messages_log.append(self._format_message(m))
+        self.update_ui()
+       
+    def update_ui(self):
         listbox = self.window[Keys.CON_LISTBOX_MESSAGES]
         listbox.update(datetime.now().strftime('%H:%M:%S') + ': ' + (msg.text() or '_no_content_') for msg in self.messages)
 
         log = self.window[Keys.CON_TEXT_LOG]
-        self.messages_log.append(self._format_message(m))
         log.update("\n\n".join(self.messages_log))
     
     def _format_message(self, m: Message):
@@ -173,24 +217,31 @@ class ConsumeWindow(Window):
             json.dumps(m.properties.headers, indent=2),
             m.text()
         ])
+    
+    def restart_ui(self):
+        super().restart_ui()
+        self.update_ui()
 
 class ConnectWindow(Window):
     def __init__(self) -> None:
-        name_size = 10, 1
-        in_size = 25, 1
-        self.layout = [
-            [sg.Text('Send messages')],
-            [sg.Text('Host', size=name_size), sg.In(default_text='localhost', size=in_size, enable_events=True, key=Keys.CONNECT_HOST)],
-            [sg.Text('Port', size=name_size), sg.In(default_text='5672', size=in_size, enable_events=True, key=Keys.CONNECT_PORT)],
-            [sg.Text('User', size=name_size), sg.In(default_text='guest', size=in_size, enable_events=True, key=Keys.CONNECT_USER)],
-            [sg.Text('Password', size=name_size), sg.In(default_text='guest', size=in_size, enable_events=True, key=Keys.CONNECT_PASSWORD)],
-            [sg.Button('Connect', key=Keys.CONNECT_BUTTON)],
-        ]
+        self.init_layout()
 
         self.rabbit = Rabbit()
 
+    def init_layout(self):
+        name_size = 10, 1
+        in_size = 25, 1
+        self.layout = [
+            [sg.Text(Locale.PUBLISH_MANY)],
+            [sg.Text(Locale.HOST, size=name_size), sg.In(default_text='localhost', size=in_size, enable_events=True, key=Keys.CONNECT_HOST)],
+            [sg.Text(Locale.PORT, size=name_size), sg.In(default_text='5672', size=in_size, enable_events=True, key=Keys.CONNECT_PORT)],
+            [sg.Text(Locale.USER, size=name_size), sg.In(default_text='guest', size=in_size, enable_events=True, key=Keys.CONNECT_USER)],
+            [sg.Text(Locale.PASSWORD, size=name_size), sg.In(default_text='guest', size=in_size, enable_events=True, key=Keys.CONNECT_PASSWORD)],
+            [sg.Button(Locale.CONNECT, key=Keys.CONNECT_BUTTON)],
+        ]
+
     def show(self):
-        self.window = sg.Window("Connect to a RabbitMQ host", self.layout, finalize=True)
+        self.window = sg.Window(Locale.CONNECT_TO_HOST, self.layout, finalize=True)
         self._show()
     
     def process_events(self, event, values):
@@ -209,10 +260,10 @@ class ConnectWindow(Window):
                 print(connection)
                 global RABBIT_CONNECTION
                 RABBIT_CONNECTION = connection
-                self.window.set_title('Connection success')
+                self.window.set_title(Locale.CONNECTION_ERROR)
             except Exception as e:
-                self.window.set_title('Connection error')
-                print('Connection error!', e)
+                self.window.set_title(Locale.CONNECTION_ERROR)
+                print(Locale.CONNECTION_ERROR, e)
         
         if event is None:
             self._close()
@@ -229,4 +280,5 @@ def main_loop():
     RABBIT_CONNECTION.close()
 
 if __name__ == '__main__':
+    Locale.set(Locale.ru)
     main_loop()
