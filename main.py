@@ -75,6 +75,9 @@ class StartWindow(Window):
             ConsumeWindow().show()
         elif event == Keys.START_CONNECT:
             ConnectWindow().show()
+        
+        if event is None and len(WINDOW_MAP) == 1:
+            self._close()
 
 class SendWindow(Window):
     def __init__(self) -> None:
@@ -104,6 +107,9 @@ class SendWindow(Window):
                 values[Keys.SEND_HEADERS],
                 values[Keys.SEND_CONTENT],
             )
+        
+        if event is None:
+            self._close()
 
 class ConsumeWindow(Window):
     def __init__(self) -> None:
@@ -207,14 +213,20 @@ class ConnectWindow(Window):
             except Exception as e:
                 self.window.set_title('Connection error')
                 print('Connection error!', e)
+        
+        if event is None:
+            self._close()
 
 def main_loop():
     StartWindow().show()
-    while True:
+    while WINDOW_MAP:
         win, event, values = sg.read_all_windows()
 
         print(win, event, values)
         window_to_process = WINDOW_MAP[win]
         window_to_process.process_events(event, values)
 
-main_loop()
+    RABBIT_CONNECTION.close()
+
+if __name__ == '__main__':
+    main_loop()

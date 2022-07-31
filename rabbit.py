@@ -87,7 +87,7 @@ class Rabbit:
     def terminate(self):
         self.channel.stop_consuming()
         self.channel.close()
-        self.connection.close()
+        # self.connection.close()
 
 @dataclass()
 class Message:
