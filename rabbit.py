@@ -40,12 +40,16 @@ class Rabbit:
     def _new_channel(self):
         self.channel = self.connection.channel()
 
-    def publish(self, exchange, routing_key, headers_text, body) -> Tuple[bool, str]:
+    def publish(self, exchange, routing_key, headers, body) -> Tuple[bool, str]:
         """
         Publish a message.
         Consume error starts a new channel closing the previous one.
         """
-        headers = get_headers(headers_text)
+        if type(headers) == str:
+            headers = get_headers(headers)
+        elif type(headers) != dict and headers is not None:
+            raise TypeError('Headers are not dict or string')
+
         with self.lock:
             try:
                 self.channel.basic_publish(
@@ -60,24 +64,28 @@ class Rabbit:
             except pika.exceptions.ChannelClosedByBroker as e:
                 self._new_channel()
                 return False, str(e)
+            except pika.exceptions.StrealLostError as e:
+                self._new_channel()
+                return False, str(e)
 
-    def consume(self, q_name: str, retries=1) -> Tuple[bool, str]:
+    def consume(self, q_name: str, prefetch=100, retries=1) -> Tuple[bool, str]:
         """
         Consume on a queue.
         Consume error starts a new channel closing the previous one.
         """
         try:
+            self.channel.basic_qos(prefetch_count=prefetch)
             self.channel.basic_consume(
                 q_name, 
                 on_message_callback=self._on_message_received, 
-                auto_ack=True)
+                auto_ack=False)
             return True, None
         except pika.exceptions.ChannelClosedByBroker as e:
             self._new_channel()
             return False, str(e)
         except IndexError as e:
             if retries > 0:
-                return self.consume(q_name, retries - 1)
+                return self.consume(q_name, retries=retries - 1)
             return False, 'Some pika bug, sorry!'
             
 
@@ -102,8 +110,8 @@ class Rabbit:
         t.join(0)
 
     def _on_message_received(self, ch, method, properties, body):
-        print(ch, method, properties, body)
         m = Message(self.channel, method, properties, body)
+        self.channel.basic_ack(m.method.delivery_tag)
         self.on_message(m)
 
     def terminate(self):
@@ -111,7 +119,10 @@ class Rabbit:
         Stop consuming and close a channel.
         Closes only default connections. Connection provided in __init__ can be used by multiple instances.
         """
-        self.channel.stop_consuming()
+        try:
+            self.channel.stop_consuming()
+        except pika.exceptions.ChannelClosedByBroker as e:
+            print(e)
         self.channel.close()
 
         if self.default_connection:

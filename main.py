@@ -191,7 +191,7 @@ class ConsumeWindow(Window):
 
         self.log_layout = [
             [sg.Text(f'{Locale.RECENT_MESSAGES}:')],
-            [sg.Multiline(size=(25, 14), key=Keys.CON_TEXT_LOG)]
+            [sg.Multiline(size=(25, 14), autoscroll=True, key=Keys.CON_TEXT_LOG)]
         ]
 
         self.layout = [
@@ -223,7 +223,7 @@ class ConsumeWindow(Window):
             self._close()
     
     def _on_message(self, m: Message):
-        self.messages.append(m)
+        self.messages.append((m, datetime.now()))
         self.messages_log.append(self._format_message(m))
         self._update_ui()
        
@@ -232,8 +232,9 @@ class ConsumeWindow(Window):
         Update messages log text and listbox values.
         """
         listbox = self.window[Keys.CON_LISTBOX_MESSAGES]
-        listbox.update(datetime.now().strftime('%H:%M:%S') + ': ' + (msg.text() or '_no_content_') for msg in self.messages)
-
+        stripped_messages = self.messages[-10:]
+        listbox.update(msg_time.strftime('%H:%M:%S') + ': ' + (msg.text() or '_no_content_') for msg, msg_time in stripped_messages)
+        
         log = self.window[Keys.CON_TEXT_LOG]
         log.update("\n\n".join(self.messages_log))
     
