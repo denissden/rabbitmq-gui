@@ -20,7 +20,7 @@ r = Rabbit(connection)
 
 
 SPEED = 0.01
-COUNT = 2
+COUNT = 2000
 MALFORMED_COUNT = 1
 DELAYS = [1, 2, 5]
 DRONE_TYPE = ['weather', 'monitoring', 'delivery']

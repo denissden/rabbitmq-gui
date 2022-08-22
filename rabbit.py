@@ -73,6 +73,7 @@ class Rabbit:
         Consume on a queue.
         Consume error starts a new channel closing the previous one.
         """
+        self._new_channel()
         try:
             self.channel.basic_qos(prefetch_count=prefetch)
             self.channel.basic_consume(
@@ -81,7 +82,6 @@ class Rabbit:
                 auto_ack=False)
             return True, None
         except pika.exceptions.ChannelClosedByBroker as e:
-            self._new_channel()
             return False, str(e)
         except IndexError as e:
             if retries > 0:
