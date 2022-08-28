@@ -64,7 +64,7 @@ class Rabbit:
             except pika.exceptions.ChannelClosedByBroker as e:
                 self._new_channel()
                 return False, str(e)
-            except pika.exceptions.StrealLostError as e:
+            except pika.exceptions.StreamLostError as e:
                 self._new_channel()
                 return False, str(e)
 

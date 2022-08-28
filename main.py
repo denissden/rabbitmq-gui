@@ -291,7 +291,7 @@ class ConnectWindow(Window):
                 print(connection)
                 global RABBIT_CONNECTION
                 RABBIT_CONNECTION = connection
-                self.window.set_title(Locale.CONNECTION_ERROR)
+                self.window.set_title(Locale.CONNECTION_SUCCESS)
             except Exception as e:
                 self.window.set_title(Locale.CONNECTION_ERROR)
                 print(Locale.CONNECTION_ERROR, e)
