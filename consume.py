@@ -6,35 +6,20 @@ import pika.connection
 import pika.channel
 import argparse
 import logging
+from connect import add_connection_args, create_params
 
 logging.basicConfig(level=logging.INFO, format='%(levelname) -10s %(asctime)s %(name)s : %(message)s')
 
 parser = argparse.ArgumentParser("Publish messages to RabbitMQ")
-parser.add_argument('-s', '--connection-string', help="e.x. 'amqp://guest:guest@localhost:5672/%2F'", required=False, default=None)
-parser.add_argument('-c', '--connection', required=False, default='localhost:5672')
-parser.add_argument('-a', '--auth', '--authorisation', required=False, default='guest:guest')
-parser.add_argument('-v', '--vhost', required=False, default='/')
 parser.add_argument('-q', '--queue', type=str, required=True, default='')
+add_connection_args(parser)
 
 args = parser.parse_args()
 
 host, port = args.connection.split(':', maxsplit=1)
 port = int(port)
 
-username, password = args.auth.split(':', maxsplit=1)
-
-if args.connection_string is None:
-    params = pika.ConnectionParameters(
-                    host=host,
-                    port=port,
-                    virtual_host=args.vhost,
-                    credentials=pika.PlainCredentials(
-                        username=username,
-                        password=password
-                    )
-                )
-else:
-    params = pika.URLParameters(args.connection_string)
+params = create_params(args)
 
 def on_open(connection: pika.connection.Connection):
     logging.info('Connected')
@@ -58,10 +43,11 @@ def on_message(channel: pika.channel.Channel,
     method: pika.spec.Basic.Deliver, 
     properties: pika.spec.BasicProperties, 
     body):
-    print('Message # %s - %s: %s' % 
+    print('Message # %s - %s: %s; login = %s' % 
         (method.delivery_tag,
         method.routing_key,
-        body.decode('utf-8')))
+        body.decode('utf-8'),
+        properties.user_id))
 
     channel.basic_ack(method.delivery_tag)
 

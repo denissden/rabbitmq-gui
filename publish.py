@@ -1,15 +1,11 @@
 #! /usr/bin/python
 
-import cProfile
-from cmath import pi
-import sys
-import time
 import pika
 import pika.spec
 import pika.connection
 import pika.channel
 import argparse
-from threading import Thread
+from connect import add_connection_args, create_params
 
 def get_headers(headers_list: list[str] | None):
     headers = {}
@@ -24,34 +20,18 @@ def get_headers(headers_list: list[str] | None):
     return headers
 
 parser = argparse.ArgumentParser("Publish messages to RabbitMQ")
-parser.add_argument('-s', '--connection-string', help="e.x. 'amqp://guest:guest@localhost:5672/%2F'", required=False, default=None)
-parser.add_argument('-c', '--connection', required=False, default='localhost:5672')
-parser.add_argument('-a', '--auth', '--authorisation', required=False, default='guest:guest')
-parser.add_argument('-v', '--vhost', required=False, default='/')
 parser.add_argument('-e', '--exchange', type=str, required=True, default='')
 parser.add_argument('-r', '--routing-key', type=str, required=True)
+parser.add_argument('-u', '--user-id', help='user_id value in properties', type=str, required=False, default=None)
 parser.add_argument('-b', '--body', type=str, required=False, default='')
 parser.add_argument('-H', '--header', action='append', type=str, required=False)
+add_connection_args(parser)
 
 args = parser.parse_args()
 
-host, port = args.connection.split(':', maxsplit=1)
-port = int(port)
+user_id = None
 
-username, password = args.auth.split(':', maxsplit=1)
-
-if args.connection_string is None:
-    params = pika.ConnectionParameters(
-                    host=host,
-                    port=port,
-                    virtual_host=args.vhost,
-                    credentials=pika.PlainCredentials(
-                        username=username,
-                        password=password
-                    )
-                )
-else:
-    params = pika.URLParameters(args.connection_string)
+params = create_params(args)
 
 def on_open(connection: pika.connection.Connection):
     connection.channel(on_open_callback=on_channel_open)
@@ -67,6 +47,7 @@ def on_channel_open(channel: pika.channel.Channel):
     properties = pika.BasicProperties(
         content_type='text/plain',
         headers=get_headers(args.header),
+        user_id=user_id
     )
     channel.basic_publish(
         exchange=args.exchange, 
